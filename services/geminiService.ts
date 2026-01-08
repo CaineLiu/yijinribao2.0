@@ -11,7 +11,6 @@ export const cleanReportData = async (
   staffList: string, 
   ipList: string, 
   forcedMode: 'auto' | 'public' | 'private' | 'ip',
-  apiBaseUrl?: string,
   userApiKey?: string
 ): Promise<{ text: string, mode: ReportMode }> => {
   // 优先级：用户手动输入的 Key > 环境变量注入的 Key
@@ -57,10 +56,9 @@ ${inputText}`;
   let lastError: any = null;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      // 动态创建 AI 实例以应用最新的配置
+      // 严格遵循 SDK 指南：初始化仅传入 apiKey
       const ai = new GoogleGenAI({ 
-        apiKey,
-        baseUrl: apiBaseUrl?.trim() || undefined 
+        apiKey
       });
       
       const response = await ai.models.generateContent({
@@ -112,10 +110,10 @@ ${inputText}`;
 
   const finalErrorMessage = lastError?.message || "未知错误";
   if (finalErrorMessage.includes('API_KEY_INVALID') || finalErrorMessage.includes('403')) {
-    throw new Error("API Key 无效或权限受限。请检查配置中心。");
+    throw new Error("API Key 无效或权限受限。请在「配置中心」检查您的 Key 设置。");
   }
   if (finalErrorMessage.includes('fetch')) {
-    throw new Error("无法连接到清洗引擎。请检查网络或配置 API 代理地址。");
+    throw new Error("无法连接到清洗引擎。Zeabur 部署通常能直接访问，请检查您的 API Key 是否开启了正确的 API 权限。");
   }
   throw new Error(finalErrorMessage);
 };

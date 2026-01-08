@@ -10,7 +10,6 @@ const DownloadIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill=
 const CheckIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-emerald-500"><polyline points="20 6 9 17 4 12"></polyline></svg>;
 const TrashIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>;
 const KeyIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.778-7.778zM12 2l.792.792c.03.03.05.07.058.113l.43 2.374c.014.078.08.134.158.132l2.583-.06c.044-.001.087.016.117.047l1.397 1.397c.03.03.048.073.047.117l-.06 2.583c-.002.078.054.144.132.158l2.374.43c.043.008.083.028.113.058L22 12l-10 10"></path></svg>;
-const GlobeIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>;
 
 const PUBLIC_HEADERS = ["日期", "运营人", "IP", "封号", "可用", "剪辑", "审核", "发布", "文案", "总客资"];
 const PRIVATE_HEADERS = ["日期", "运营人", "新分配", "新微信", "总客资", "以往未接", "今日未接", "无效", "加微", "签约", "上门/操作", "放款"];
@@ -29,7 +28,6 @@ function App() {
   const [privateStaff, setPrivateStaff] = useState(() => localStorage.getItem('report_private_staff') || DEFAULT_PRIVATE_STAFF);
   const [ipStaff, setIpStaff] = useState(() => localStorage.getItem('report_ip_staff') || DEFAULT_IP_STAFF);
   const [ipList, setIpList] = useState(() => localStorage.getItem('report_ip_list') || DEFAULT_IPS);
-  const [apiBaseUrl, setApiBaseUrl] = useState(() => localStorage.getItem('report_api_base_url') || '');
   const [customApiKey, setCustomApiKey] = useState(() => localStorage.getItem('report_custom_api_key') || '');
 
   useEffect(() => {
@@ -37,9 +35,8 @@ function App() {
     localStorage.setItem('report_private_staff', privateStaff);
     localStorage.setItem('report_ip_staff', ipStaff);
     localStorage.setItem('report_ip_list', ipList);
-    localStorage.setItem('report_api_base_url', apiBaseUrl);
     localStorage.setItem('report_custom_api_key', customApiKey);
-  }, [publicStaff, privateStaff, ipStaff, ipList, apiBaseUrl, customApiKey]);
+  }, [publicStaff, privateStaff, ipStaff, ipList, customApiKey]);
 
   const currentProcessingStaffList = useMemo(() => {
     if (forcedMode === 'public') return publicStaff;
@@ -59,7 +56,6 @@ function App() {
         currentProcessingStaffList, 
         ipList, 
         forcedMode, 
-        apiBaseUrl,
         customApiKey
       );
       setOutputText(text);
@@ -92,7 +88,7 @@ function App() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-             <button onClick={() => setIsSettingsOpen(true)} className="flex items-center gap-2 px-3 py-2 bg-slate-50 text-slate-600 hover:bg-white hover:text-indigo-600 border border-slate-200 rounded-xl transition-all shadow-sm">
+             <button onClick={() => setIsSettingsOpen(true)} className="flex items-center gap-2 px-3 py-2 bg-slate-50 text-slate-600 border border-slate-200 rounded-xl transition-all shadow-sm">
               <SettingsIcon />
               <span className="text-xs font-bold hidden sm:inline">配置中心</span>
             </button>
@@ -159,10 +155,10 @@ function App() {
                 <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-4">
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                 </div>
-                <h3 className="text-lg font-extrabold text-slate-800 mb-2">服务暂时不可用</h3>
+                <h3 className="text-lg font-extrabold text-slate-800 mb-2">服务连接异常</h3>
                 <p className="text-sm text-slate-400 mb-8 max-w-sm mx-auto leading-relaxed">{error}</p>
                 <div className="flex flex-wrap justify-center gap-3">
-                  <Button onClick={() => setIsSettingsOpen(true)} variant="outline">检查配置/设置代理</Button>
+                  <Button onClick={() => setIsSettingsOpen(true)} variant="outline">检查配置中心</Button>
                   <Button onClick={handleProcess}>重新尝试</Button>
                 </div>
               </div>
@@ -197,8 +193,7 @@ function App() {
             </div>
             
             <div className="p-8 space-y-8 overflow-y-auto custom-scroll">
-              {/* 网络与 Key 设置 */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-indigo-50/50 rounded-2xl border border-indigo-100/50">
+              <div className="p-6 bg-indigo-50/50 rounded-2xl border border-indigo-100/50">
                 <div className="space-y-3">
                   <label className="text-xs font-black text-slate-500 uppercase flex items-center gap-2">
                     <KeyIcon /> 个人 API Key (可选)
@@ -210,24 +205,10 @@ function App() {
                     placeholder="输入您的 Gemini Key"
                     className="w-full p-3 bg-white border border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 text-sm outline-none"
                   />
-                  <p className="text-[10px] text-indigo-400 italic font-medium leading-relaxed">留空则使用系统内置 Key。建议填入个人 Key 以获得更稳定的配额。</p>
-                </div>
-                <div className="space-y-3">
-                  <label className="text-xs font-black text-slate-500 uppercase flex items-center gap-2">
-                    <GlobeIcon /> API 代理地址
-                  </label>
-                  <input 
-                    type="text"
-                    value={apiBaseUrl}
-                    onChange={(e) => setApiBaseUrl(e.target.value)}
-                    placeholder="例如: https://proxy.xxx.com"
-                    className="w-full p-3 bg-white border border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 text-sm outline-none"
-                  />
-                  <p className="text-[10px] text-indigo-400 italic font-medium">若在受限地区直连失败，请在此填入代理域名。</p>
+                  <p className="text-[10px] text-indigo-400 italic font-medium leading-relaxed">留空则使用系统内置 Key。部署在 Zeabur 后通常可直接访问。</p>
                 </div>
               </div>
 
-              {/* 团队名单设置 */}
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-3">
