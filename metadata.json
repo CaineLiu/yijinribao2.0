@@ -1,0 +1,5 @@
+{
+  "name": "Daily Report Cleaner",
+  "description": "A specialized tool to clean and format unstructured daily reports into strict TSV format for public and private domain operations.",
+  "requestFramePermissions": []
+}
