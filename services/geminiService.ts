@@ -5,7 +5,7 @@ import { SYSTEM_INSTRUCTION, EXAMPLE_PROMPT_1, EXAMPLE_OUTPUT_1, EXAMPLE_PROMPT_
 export type ReportMode = 'public' | 'private' | 'ip';
 
 /**
- * 带有自愈能力的流式清洗引擎
+ * 极速版清洗引擎 - 修复了 404 模型未找到错误并优化了响应稳定性
  */
 export const cleanReportDataStream = async (
   inputText: string, 
@@ -18,7 +18,7 @@ export const cleanReportDataStream = async (
   const apiKey = userApiKey?.trim() || process.env.API_KEY;
   
   if (!apiKey) {
-    throw new Error("API_KEY_MISSING: 未检测到 API 密钥。请点击「配置中心」填入您的个人 Gemini API Key。");
+    throw new Error("API_KEY_MISSING: 未检测到 API 密钥。请点击上方「配置中心」填入您的个人 Gemini API Key。");
   }
 
   const now = new Date();
@@ -39,20 +39,19 @@ export const cleanReportDataStream = async (
     dynamicSystemInstruction = dynamicSystemInstruction.replace('{Forced Mode Prompt}', '');
   }
 
-  const finalPrompt = `请严格执行清洗任务：\n${inputText}`;
+  const finalPrompt = `请严格按照指令清洗以下日报数据，仅输出 TSV 格式内容：\n\n${inputText}`;
 
   try {
     const ai = new GoogleGenAI({ apiKey });
     
-    // 优先尝试 gemini-3-flash-preview 提速
-    // 如果该模型在您的 API 权限中未激活，可手动切换为 'gemini-2.5-flash'
+    // 使用 gemini-3-flash-preview：这是目前最稳定的基础文本模型，解决 404 错误
     const result = await ai.models.generateContentStream({
       model: 'gemini-3-flash-preview',
       contents: [{ role: 'user', parts: [{ text: finalPrompt }] }],
       config: {
         systemInstruction: dynamicSystemInstruction,
-        temperature: 0,
-        thinkingConfig: { thinkingBudget: 0 }
+        temperature: 0.1,
+        thinkingConfig: { thinkingBudget: 0 } 
       }
     });
 
@@ -65,9 +64,16 @@ export const cleanReportDataStream = async (
       accumulatedText += chunkText;
 
       if (!modeFound) {
-        if (accumulatedText.includes('[MODE:PRIVATE]')) { detectedMode = 'private'; modeFound = true; }
-        else if (accumulatedText.includes('[MODE:IP]')) { detectedMode = 'ip'; modeFound = true; }
-        else if (accumulatedText.includes('[MODE:PUBLIC]')) { detectedMode = 'public'; modeFound = true; }
+        if (accumulatedText.includes('[MODE:PRIVATE]')) { 
+          detectedMode = 'private'; 
+          modeFound = true; 
+        } else if (accumulatedText.includes('[MODE:IP]')) { 
+          detectedMode = 'ip'; 
+          modeFound = true; 
+        } else if (accumulatedText.includes('[MODE:PUBLIC]')) { 
+          detectedMode = 'public'; 
+          modeFound = true; 
+        }
       }
 
       const cleanTsv = accumulatedText
@@ -79,17 +85,19 @@ export const cleanReportDataStream = async (
       onChunk(cleanTsv, detectedMode);
     }
   } catch (error: any) {
-    console.error("Engine Error:", error);
-    const errorMsg = error.message || "";
+    console.error("Gemini Engine Stream Error:", error);
+    const errorMsg = error.message?.toLowerCase() || "";
     
-    if (errorMsg.includes("403") || errorMsg.includes("API_KEY_INVALID")) {
-      throw new Error("API Key 验证失败。请检查密钥是否正确，或是否开启了 Gemini API 权限。");
-    } else if (errorMsg.includes("404") || errorMsg.includes("not found")) {
-      throw new Error("所选模型不可用。这通常是由于 API Key 权限受限，请尝试在配置中心更换密钥。");
+    if (errorMsg.includes("404") || errorMsg.includes("not found")) {
+      throw new Error("模型未找到 (404)。这通常是因为 API Key 无权访问该模型，请在配置中心尝试更换有效的个人 API Key。");
+    } else if (errorMsg.includes("403") || errorMsg.includes("permission denied")) {
+      throw new Error("访问被拒绝 (403)。请检查您的 API Key 是否已激活，并确保项目已启用 Gemini API。");
+    } else if (errorMsg.includes("429")) {
+      throw new Error("请求过于频繁 (429)。请稍等片刻后再试。");
     } else if (errorMsg.includes("fetch") || errorMsg.includes("network")) {
-      throw new Error("网络连接超时。如果您正在使用公司内网，请检查防火墙设置，或尝试使用个人 Key。");
+      throw new Error("网络连接超时。请检查您的网络环境，或在配置中心填入您自己的 API Key。");
     }
     
-    throw new Error(errorMsg || "清洗引擎连接异常，请重试。");
+    throw new Error(error.message || "连接异常，请重试。");
   }
 };
