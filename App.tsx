@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { cleanReportData, ReportMode } from './services/geminiService.ts';
 import { Button } from './components/Button.tsx';
 import { DEFAULT_PUBLIC_STAFF, DEFAULT_PRIVATE_STAFF, DEFAULT_IP_STAFF, DEFAULT_IPS, EXAMPLE_PROMPT_1 } from './constants.ts';
@@ -14,16 +14,31 @@ const KeyIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none
 const PUBLIC_HEADERS = ["日期", "运营人", "IP", "封号", "可用", "剪辑", "审核", "发布", "文案", "总客资"];
 const PRIVATE_HEADERS = ["日期", "运营人", "新分配", "新微信", "总客资", "以往未接", "今日未接", "无效", "加微", "签约", "上门/操作", "放款"];
 
+const LOADING_STEPS = [
+  "正在初始化清洗引擎...",
+  "正在识别数据模式...",
+  "正在执行智能文本校对...",
+  "正在提取运营人指标...",
+  "正在格式化 TSV 数据表...",
+  "正在进行最后的合规性检查...",
+  "清洗即将完成..."
+];
+
 function App() {
   const [inputText, setInputText] = useState('');
   const [outputText, setOutputText] = useState('');
   const [activeMode, setActiveMode] = useState<ReportMode>('public');
   const [forcedMode, setForcedMode] = useState<'auto' | ReportMode>('auto');
   const [isLoading, setIsLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [loadingText, setLoadingText] = useState(LOADING_STEPS[0]);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   
+  const progressInterval = useRef<number | null>(null);
+  const stepInterval = useRef<number | null>(null);
+
   const [publicStaff, setPublicStaff] = useState(() => localStorage.getItem('report_public_staff') || DEFAULT_PUBLIC_STAFF);
   const [privateStaff, setPrivateStaff] = useState(() => localStorage.getItem('report_private_staff') || DEFAULT_PRIVATE_STAFF);
   const [ipStaff, setIpStaff] = useState(() => localStorage.getItem('report_ip_staff') || DEFAULT_IP_STAFF);
@@ -45,11 +60,46 @@ function App() {
     return `${publicStaff}, ${privateStaff}, ${ipStaff}`;
   }, [forcedMode, publicStaff, privateStaff, ipStaff]);
 
+  const startLoadingSimulation = () => {
+    setProgress(0);
+    setLoadingText(LOADING_STEPS[0]);
+    
+    // 进度条模拟：先快后慢
+    progressInterval.current = window.setInterval(() => {
+      setProgress(prev => {
+        if (prev < 30) return prev + 2;
+        if (prev < 70) return prev + 0.5;
+        if (prev < 92) return prev + 0.1;
+        return prev;
+      });
+    }, 100);
+
+    // 文案切换模拟
+    let step = 0;
+    stepInterval.current = window.setInterval(() => {
+      step = (step + 1) % LOADING_STEPS.length;
+      setLoadingText(LOADING_STEPS[step]);
+    }, 2500);
+  };
+
+  const stopLoadingSimulation = (success = true) => {
+    if (progressInterval.current) clearInterval(progressInterval.current);
+    if (stepInterval.current) clearInterval(stepInterval.current);
+    if (success) {
+      setProgress(100);
+      setTimeout(() => setProgress(0), 1000);
+    } else {
+      setProgress(0);
+    }
+  };
+
   const handleProcess = async () => {
     if (!inputText.trim()) return;
     setIsLoading(true);
     setError(null);
     setCopied(false);
+    startLoadingSimulation();
+
     try {
       const { text, mode } = await cleanReportData(
         inputText, 
@@ -60,8 +110,10 @@ function App() {
       );
       setOutputText(text);
       setActiveMode(mode);
+      stopLoadingSimulation(true);
     } catch (err: any) {
       setError(err.message || "清洗引擎连接失败。");
+      stopLoadingSimulation(false);
     } finally {
       setIsLoading(false);
     }
@@ -128,28 +180,42 @@ function App() {
           </div>
         </section>
 
-        <section className="flex-[1.8] glass-card animate-slide-up bg-white">
+        <section className="flex-[1.8] glass-card animate-slide-up bg-white relative">
+          {/* 可视化进度条 */}
+          {progress > 0 && (
+            <div className="absolute top-0 left-0 right-0 z-50 overflow-hidden h-1">
+              <div 
+                className="h-full bg-gradient-to-r from-indigo-500 via-violet-500 to-indigo-500 transition-all duration-300 ease-out"
+                style={{ width: `${progress}%`, backgroundSize: '200% 100%', animation: 'shimmer 2s infinite linear' }}
+              />
+            </div>
+          )}
+
           <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/30 shrink-0">
             <div className="flex items-center gap-3">
               <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest">清洗结果 (TSV)</h2>
-              {outputText && (
-                <span className="px-3 py-1 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-full text-[10px] font-black uppercase tracking-widest animate-pulse">
+              {outputText && !isLoading && (
+                <span className="px-3 py-1 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-full text-[10px] font-black uppercase tracking-widest">
                   清洗完成
                 </span>
               )}
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={() => {/* Download Logic */}} className="p-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl hover:border-indigo-400 hover:text-indigo-600 transition-all">
+              <button disabled={!outputText} className={`p-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl hover:border-indigo-400 hover:text-indigo-600 transition-all ${!outputText ? 'opacity-30 cursor-not-allowed' : ''}`}>
                 <DownloadIcon />
               </button>
-              <button onClick={() => {navigator.clipboard.writeText(outputText); setCopied(true); setTimeout(() => setCopied(false), 2000);}} className={`btn-modern py-2.5 px-4 shadow-sm ${copied ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-900 text-white'}`}>
+              <button 
+                onClick={() => {navigator.clipboard.writeText(outputText); setCopied(true); setTimeout(() => setCopied(false), 2000);}} 
+                disabled={!outputText}
+                className={`btn-modern py-2.5 px-4 shadow-sm ${!outputText ? 'opacity-30 cursor-not-allowed' : ''} ${copied ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-900 text-white'}`}
+              >
                 {copied ? <CheckIcon /> : <ClipboardIcon />}
                 {copied ? '已复制' : '复制数据'}
               </button>
             </div>
           </div>
 
-          <div className="flex-1 overflow-auto custom-scroll">
+          <div className="flex-1 overflow-auto custom-scroll flex flex-col">
             {error ? (
               <div className="h-full flex flex-col items-center justify-center p-12 text-center">
                 <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-4">
@@ -161,6 +227,16 @@ function App() {
                   <Button onClick={() => setIsSettingsOpen(true)} variant="outline">检查配置中心</Button>
                   <Button onClick={handleProcess}>重新尝试</Button>
                 </div>
+              </div>
+            ) : isLoading ? (
+              <div className="h-full flex flex-col items-center justify-center p-12 text-center animate-pulse">
+                <div className="w-20 h-20 relative flex items-center justify-center mb-6">
+                   <div className="absolute inset-0 border-4 border-indigo-100 rounded-full"></div>
+                   <div className="absolute inset-0 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-indigo-600"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"></path></svg>
+                </div>
+                <h3 className="text-lg font-extrabold text-slate-800 mb-2 tracking-tight">{loadingText}</h3>
+                <p className="text-xs text-slate-400 font-medium">正在调配 Gemini 3.0 超大规模模型能力...</p>
               </div>
             ) : outputText ? (
               <div className="min-w-max">
