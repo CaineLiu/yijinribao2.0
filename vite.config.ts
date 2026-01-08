@@ -5,21 +5,21 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   define: {
-    // 注入环境变量，优先读取构建环境中的 API_KEY
+    // 注入环境变量
     'process.env.API_KEY': JSON.stringify(process.env.API_KEY || '')
   },
   build: {
     target: 'esnext',
     outDir: 'dist',
-    sourcemap: false,
-    chunkSizeWarningLimit: 1000
+    emptyOutDir: true,
+    sourcemap: false
   },
   server: {
-    port: 3000,
-    host: true
+    host: true,
+    port: 3000
   },
   preview: {
-    port: 8080,
     host: true
+    // 移除 port，由 package.json 中的 --port $PORT 决定
   }
 });
