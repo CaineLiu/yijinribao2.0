@@ -10,10 +10,16 @@ export const cleanReportData = async (
   inputText: string, 
   staffList: string, 
   ipList: string, 
-  forcedMode: 'auto' | 'public' | 'private' | 'ip'
+  forcedMode: 'auto' | 'public' | 'private' | 'ip',
+  apiBaseUrl?: string,
+  userApiKey?: string
 ): Promise<{ text: string, mode: ReportMode }> => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("系统配置错误：API Key 缺失。");
+  // 优先级：用户手动输入的 Key > 环境变量注入的 Key
+  const apiKey = userApiKey?.trim() || process.env.API_KEY;
+  
+  if (!apiKey) {
+    throw new Error("未检测到 API Key。请在「配置中心」填入您的个人 Gemini API Key 或联系管理员。");
+  }
 
   const now = new Date();
   const currentDate = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
@@ -51,7 +57,12 @@ ${inputText}`;
   let lastError: any = null;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      // 动态创建 AI 实例以应用最新的配置
+      const ai = new GoogleGenAI({ 
+        apiKey,
+        baseUrl: apiBaseUrl?.trim() || undefined 
+      });
+      
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: [{ role: 'user', parts: [{ text: finalPrompt }] }],
@@ -78,22 +89,33 @@ ${inputText}`;
         cleanTsvText = cleanedFullText.replace('[MODE:PUBLIC]', '').trim();
       }
 
-      if (!cleanTsvText) throw new Error("模型返回数据为空。");
+      if (!cleanTsvText) throw new Error("模型响应解析失败。");
 
       return { text: cleanTsvText, mode };
     } catch (error: any) {
       lastError = error;
-      if (error.message?.includes('500') || error.message?.includes('Rpc failed') || error.message?.includes('xhr')) {
-        await sleep(1000 * (attempt + 1));
+      console.error(`Attempt ${attempt + 1} failed:`, error);
+      
+      const errMsg = error.message?.toLowerCase() || "";
+      // 网络问题尝试重试
+      if (errMsg.includes('fetch') || errMsg.includes('network') || errMsg.includes('failed')) {
+        await sleep(800);
         continue;
       }
-      break;
+      // 如果是 Key 错误或配额错误，直接报错不重试
+      if (errMsg.includes('api_key_invalid') || errMsg.includes('403') || errMsg.includes('limit')) {
+        break;
+      }
+      await sleep(1000 * (attempt + 1));
     }
   }
 
-  const errorMsg = lastError?.message || "未知清洗错误";
-  if (errorMsg.includes('500') || errorMsg.includes('Rpc failed')) {
-    throw new Error("清洗引擎暂时不可用 (RPC 500)。请尝试刷新页面重试。");
+  const finalErrorMessage = lastError?.message || "未知错误";
+  if (finalErrorMessage.includes('API_KEY_INVALID') || finalErrorMessage.includes('403')) {
+    throw new Error("API Key 无效或权限受限。请检查配置中心。");
   }
-  throw lastError;
+  if (finalErrorMessage.includes('fetch')) {
+    throw new Error("无法连接到清洗引擎。请检查网络或配置 API 代理地址。");
+  }
+  throw new Error(finalErrorMessage);
 };
