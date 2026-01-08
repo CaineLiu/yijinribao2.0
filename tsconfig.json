@@ -1,3 +1,4 @@
+
 {
   "compilerOptions": {
     "target": "ES2020",
@@ -10,7 +11,8 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "jsx": "react"
+    "jsx": "react-jsx",
+    "types": ["node"]
   },
-  "include": ["."]
+  "include": ["**/*.ts", "**/*.tsx", "vite.config.ts"]
 }
