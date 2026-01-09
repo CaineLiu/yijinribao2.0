@@ -16,8 +16,7 @@ const PRIVATE_HEADERS = ["日期", "运营人", "新分配", "新微信", "总�
 function App() {
   const [inputText, setInputText] = useState('');
   const [outputText, setOutputText] = useState('');
-  const [activeMode, setActiveMode] = useState<ReportMode>('public');
-  const [forcedMode, setForcedMode] = useState<'auto' | ReportMode>('auto');
+  const [activeMode, setActiveMode] = useState<ReportMode>(() => (localStorage.getItem('report_last_mode') as ReportMode) || 'public');
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -38,14 +37,15 @@ function App() {
     localStorage.setItem('report_ip_staff', ipStaff);
     localStorage.setItem('report_ip_list', ipList);
     localStorage.setItem('report_custom_api_key', customApiKey);
-  }, [publicStaff, privateStaff, ipStaff, ipList, customApiKey]);
+    localStorage.setItem('report_last_mode', activeMode);
+  }, [publicStaff, privateStaff, ipStaff, ipList, customApiKey, activeMode]);
 
-  const currentProcessingStaffList = useMemo(() => {
-    if (forcedMode === 'public') return publicStaff;
-    if (forcedMode === 'private') return privateStaff;
-    if (forcedMode === 'ip') return ipStaff;
-    return `${publicStaff}, ${privateStaff}, ${ipStaff}`;
-  }, [forcedMode, publicStaff, privateStaff, ipStaff]);
+  const currentConfigStaffList = useMemo(() => {
+    if (activeMode === 'public') return publicStaff;
+    if (activeMode === 'private') return privateStaff;
+    if (activeMode === 'ip') return ipStaff;
+    return publicStaff;
+  }, [activeMode, publicStaff, privateStaff, ipStaff]);
 
   const handleProcess = async () => {
     if (!inputText.trim()) return;
@@ -62,13 +62,12 @@ function App() {
     try {
       await cleanReportDataStream(
         inputText, 
-        currentProcessingStaffList, 
+        currentConfigStaffList, 
         ipList, 
-        forcedMode, 
+        activeMode, 
         customApiKey,
-        (text, mode) => {
+        (text) => {
           setOutputText(text);
-          setActiveMode(mode);
           setProgress(95);
         }
       );
@@ -91,6 +90,16 @@ function App() {
       .filter(cells => cells.length > 1);
   }, [outputText]);
 
+  const submissionStatus = useMemo(() => {
+    const fullList = currentConfigStaffList.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+    const submittedSet = new Set(tableData.map(row => row[1])); // 运营人通常在第二列
+    
+    return {
+      submitted: fullList.filter(name => submittedSet.has(name)),
+      missing: fullList.filter(name => !submittedSet.has(name))
+    };
+  }, [tableData, currentConfigStaffList]);
+
   return (
     <div className="app-wrapper">
       <nav className="app-nav">
@@ -100,8 +109,8 @@ function App() {
                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
             </div>
             <div>
-              <h1 className="text-lg font-extrabold text-slate-800 tracking-tight leading-none">日报智能清洗</h1>
-              <span className="text-[10px] text-indigo-500 font-black uppercase tracking-widest mt-1 inline-block">Enterprise Engine v3.5</span>
+              <h1 className="text-lg font-extrabold text-slate-800 tracking-tight leading-none">日报助手 v4.0</h1>
+              <span className="text-[10px] text-indigo-500 font-black uppercase tracking-widest mt-1 inline-block">Tracking & Cleaning Engine</span>
             </div>
           </div>
           <button onClick={() => setIsSettingsOpen(true)} className="flex items-center gap-2 px-4 py-2.5 bg-white text-slate-600 border border-slate-200 rounded-xl transition-all shadow-sm hover:shadow-md hover:border-indigo-200">
@@ -120,89 +129,118 @@ function App() {
           <textarea
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder="在此粘贴非结构化日报..."
+            placeholder="粘贴群聊日报..."
             className="input-area flex-1 focus:bg-indigo-50/5 transition-colors"
           />
           <div className="p-6 bg-slate-50 border-t border-slate-100">
-             <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-2 custom-scroll">
-              {(['auto', 'public', 'private', 'ip'] as const).map(m => (
+             <div className="flex items-center gap-2 mb-4">
+              {(['public', 'private', 'ip'] as const).map(m => (
                 <button
                   key={m}
-                  onClick={() => setForcedMode(m)}
-                  className={`px-4 py-2 text-[11px] font-black rounded-xl border transition-all whitespace-nowrap ${
-                    forcedMode === m ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-white text-slate-400 border-slate-200 hover:border-indigo-300'
+                  onClick={() => setActiveMode(m)}
+                  className={`flex-1 px-4 py-2.5 text-[11px] font-black rounded-xl border transition-all ${
+                    activeMode === m ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-white text-slate-400 border-slate-200 hover:border-indigo-300'
                   }`}
                 >
-                  {m === 'auto' ? '智能识别' : m === 'public' ? '公域模式' : m === 'private' ? '私域模式' : 'IP团队模式'}
+                  {m === 'public' ? '公域模式' : m === 'private' ? '私域模式' : 'IP模式'}
                 </button>
               ))}
             </div>
             <Button onClick={handleProcess} isLoading={isLoading} disabled={!inputText.trim()} className="w-full h-14 shadow-indigo-100 shadow-xl">
-              立即清洗数据
+              立即清洗并检查名单
             </Button>
           </div>
         </section>
 
-        <section className="flex-[1.8] glass-card animate-slide-up bg-white relative">
-          {progress > 0 && (
-            <div className="absolute top-0 left-0 right-0 z-50 h-1 overflow-hidden">
-              <div 
-                className="h-full bg-indigo-600 transition-all duration-300 ease-out"
-                style={{ width: `${progress}%` }}
-              />
+        <section className="flex-[1.8] flex flex-col gap-6 animate-slide-up">
+          {/* 提交统计卡片 */}
+          <div className="glass-card bg-white p-5 shrink-0">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                名单追踪
+              </h2>
+              <div className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-md">
+                进度: {submissionStatus.submitted.length}/{submissionStatus.submitted.length + submissionStatus.missing.length}
+              </div>
             </div>
-          )}
-
-          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
-            <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest">清洗结果 (TSV)</h2>
-            <button 
-              onClick={() => {navigator.clipboard.writeText(outputText); setCopied(true); setTimeout(() => setCopied(false), 2000);}} 
-              disabled={!outputText}
-              className={`btn-modern py-2 px-4 shadow-sm ${!outputText ? 'opacity-30' : ''} ${copied ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-900 text-white'}`}
-            >
-              {copied ? <CheckIcon /> : <ClipboardIcon />}
-              {copied ? '已复制' : '复制数据'}
-            </button>
+            
+            <div className="flex flex-wrap gap-2">
+              {submissionStatus.missing.map(name => (
+                <span key={name} className="px-3 py-1.5 bg-rose-50 text-rose-600 text-[11px] font-bold rounded-lg border border-rose-100 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 bg-rose-400 rounded-full"></span>
+                  {name} (未交)
+                </span>
+              ))}
+              {submissionStatus.submitted.map(name => (
+                <span key={name} className="px-3 py-1.5 bg-emerald-50 text-emerald-600 text-[11px] font-bold rounded-lg border border-emerald-100 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full"></span>
+                  {name}
+                </span>
+              ))}
+              {submissionStatus.missing.length === 0 && submissionStatus.submitted.length > 0 && (
+                <p className="text-xs text-emerald-600 font-bold bg-emerald-50 w-full p-2 rounded-lg text-center border border-emerald-100">✨ 所有人员均已完成提交</p>
+              )}
+            </div>
           </div>
 
-          <div className="flex-1 overflow-auto custom-scroll flex flex-col">
-            {error ? (
-              <div className="h-full flex flex-col items-center justify-center p-12 text-center animate-slide-up">
-                <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-6">
-                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                </div>
-                <h3 className="text-xl font-black text-slate-800 mb-3">服务连接异常</h3>
-                <p className="text-sm text-slate-400 mb-8 max-w-sm mx-auto leading-relaxed">
-                  {error.includes("API_KEY") ? "未检测到有效的 API Key。请在配置中心检查您的个人密钥是否正确。" : error}
-                </p>
-                <div className="flex gap-4">
-                  <button onClick={() => setIsSettingsOpen(true)} className="px-6 py-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50 transition-all">检查配置中心</button>
-                  <Button onClick={handleProcess} className="px-8 shadow-indigo-100 shadow-xl">重新尝试</Button>
-                </div>
-              </div>
-            ) : outputText || isLoading ? (
-              <div className="min-w-max">
-                <table className="data-table">
-                  <thead>
-                    <tr>{(activeMode === 'private' ? PRIVATE_HEADERS : PUBLIC_HEADERS).map((h, i) => <th key={i}>{h}</th>)}</tr>
-                  </thead>
-                  <tbody>
-                    {tableData.map((row, rI) => (
-                      <tr key={rI} className="hover:bg-indigo-50/30 transition-colors animate-slide-up">
-                        {row.map((cell, cI) => <td key={cI}>{cell || '0'}</td>)}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-slate-300 p-12 opacity-40">
-                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
-                  <ClipboardIcon />
-                </div>
-                <p className="font-bold tracking-tight">等待输入数据进行清洗...</p>
+          {/* TSV 结果卡片 */}
+          <div className="glass-card bg-white relative flex-1 min-h-0 flex flex-col">
+            {progress > 0 && (
+              <div className="absolute top-0 left-0 right-0 z-50 h-1 overflow-hidden">
+                <div 
+                  className="h-full bg-indigo-600 transition-all duration-300 ease-out"
+                  style={{ width: `${progress}%` }}
+                />
               </div>
             )}
+
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
+              <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest">清洗结果 (TSV)</h2>
+              <button 
+                onClick={() => {navigator.clipboard.writeText(outputText); setCopied(true); setTimeout(() => setCopied(false), 2000);}} 
+                disabled={!outputText}
+                className={`btn-modern py-2 px-4 shadow-sm ${!outputText ? 'opacity-30' : ''} ${copied ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-900 text-white'}`}
+              >
+                {copied ? <CheckIcon /> : <ClipboardIcon />}
+                {copied ? '已复制' : '复制数据'}
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-auto custom-scroll">
+              {error ? (
+                <div className="h-full flex flex-col items-center justify-center p-12 text-center">
+                  <div className="w-12 h-12 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-4">
+                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                  </div>
+                  <h3 className="text-lg font-black text-slate-800 mb-2">连接异常</h3>
+                  <p className="text-xs text-slate-400 mb-6 max-w-[240px] leading-relaxed">{error}</p>
+                  <Button onClick={handleProcess} variant="outline" className="px-8">重新尝试</Button>
+                </div>
+              ) : outputText || isLoading ? (
+                <div className="min-w-max">
+                  <table className="data-table">
+                    <thead>
+                      <tr>{(activeMode === 'private' ? PRIVATE_HEADERS : PUBLIC_HEADERS).map((h, i) => <th key={i}>{h}</th>)}</tr>
+                    </thead>
+                    <tbody>
+                      {tableData.map((row, rI) => (
+                        <tr key={rI} className="hover:bg-indigo-50/30 transition-colors">
+                          {row.map((cell, cI) => <td key={cI}>{cell || '0'}</td>)}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center text-slate-300 p-12 opacity-40">
+                  <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
+                    <ClipboardIcon />
+                  </div>
+                  <p className="font-bold tracking-tight">等待输入数据进行清洗...</p>
+                </div>
+              )}
+            </div>
           </div>
         </section>
       </main>
@@ -226,13 +264,10 @@ function App() {
                     type="password"
                     value={customApiKey}
                     onChange={(e) => setCustomApiKey(e.target.value)}
-                    placeholder="在此输入您的 Gemini API Key"
-                    className="w-full p-4 bg-white border border-indigo-200 rounded-xl focus:ring-4 focus:ring-indigo-500/10 text-sm outline-none transition-all shadow-inner"
+                    placeholder="粘贴您的 Gemini API Key"
+                    className="w-full p-4 bg-white border border-indigo-200 rounded-xl focus:ring-4 focus:ring-indigo-500/10 text-sm outline-none transition-all"
                   />
-                  <div className="flex items-center gap-2 mt-2">
-                    <div className={`w-2 h-2 rounded-full ${customApiKey ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`}></div>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{customApiKey ? '已识别到自定义密钥' : '未检测到密钥，将尝试使用环境默认密钥'}</p>
-                  </div>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">访问 Google AI Studio 获取免费密钥</p>
                 </div>
               </div>
 
@@ -244,6 +279,14 @@ function App() {
                 <div className="space-y-3">
                   <label className="text-xs font-black text-slate-500 uppercase">私域团队名单</label>
                   <textarea value={privateStaff} onChange={(e) => setPrivateStaff(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl h-24 text-xs outline-none focus:border-indigo-400 transition-all" />
+                </div>
+                <div className="space-y-3">
+                  <label className="text-xs font-black text-slate-500 uppercase">IP团队名单</label>
+                  <textarea value={ipStaff} onChange={(e) => setIpStaff(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl h-24 text-xs outline-none focus:border-indigo-400 transition-all" />
+                </div>
+                <div className="space-y-3">
+                  <label className="text-xs font-black text-slate-500 uppercase">已知 IP 列表</label>
+                  <textarea value={ipList} onChange={(e) => setIpList(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl h-24 text-xs outline-none focus:border-indigo-400 transition-all" />
                 </div>
               </div>
             </div>
