@@ -10,8 +10,9 @@ const CheckIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="no
 const TrashIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>;
 const KeyIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.778-7.778zM12 2l.792.792c.03.03.05.07.058.113l.43 2.374c.014.078.08.134.158.132l2.583-.06c.044-.001.087.016.117.047l1.397 1.397c.043.03.05.073.047.117l-.06 2.583c-.002.078.054.144.132.158l2.374.43c.043.008.083.028.113.058L22 12l-10 10"></path></svg>;
 
-const PUBLIC_HEADERS = ["日期", "运营人", "IP", "封号", "可用", "剪辑", "审核", "发布", "文案", "总客资"];
+const PUBLIC_HEADERS = ["日期", "运营人", "IP名称", "封号", "可用", "剪辑", "审核", "发布", "文案", "总客资"];
 const PRIVATE_HEADERS = ["日期", "运营人", "新分配", "新微信", "总客资", "以往未接", "今日未接", "无效", "加微", "签约", "上门/操作", "放款"];
+const IP_HEADERS = ["日期", "IP名称", "数量", "运营人"];
 
 function App() {
   const [inputText, setInputText] = useState('');
@@ -90,15 +91,23 @@ function App() {
       .filter(cells => cells.length > 1);
   }, [outputText]);
 
+  const currentHeaders = useMemo(() => {
+    if (activeMode === 'private') return PRIVATE_HEADERS;
+    if (activeMode === 'ip') return IP_HEADERS;
+    return PUBLIC_HEADERS;
+  }, [activeMode]);
+
   const submissionStatus = useMemo(() => {
     const fullList = currentConfigStaffList.split(/[,，]/).map(s => s.trim()).filter(Boolean);
-    const submittedSet = new Set(tableData.map(row => row[1])); // 运营人通常在第二列
+    // 公域和私域模式下，运营人在第2列 (index 1)；IP模式下，运营人在第4列 (index 3)
+    const operatorColIndex = activeMode === 'ip' ? 3 : 1;
+    const submittedSet = new Set(tableData.map(row => row[operatorColIndex]));
     
     return {
       submitted: fullList.filter(name => submittedSet.has(name)),
       missing: fullList.filter(name => !submittedSet.has(name))
     };
-  }, [tableData, currentConfigStaffList]);
+  }, [tableData, currentConfigStaffList, activeMode]);
 
   return (
     <div className="app-wrapper">
@@ -109,7 +118,7 @@ function App() {
                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
             </div>
             <div>
-              <h1 className="text-lg font-extrabold text-slate-800 tracking-tight leading-none">日报助手 v4.0</h1>
+              <h1 className="text-lg font-extrabold text-slate-800 tracking-tight leading-none">日报助手 v4.1</h1>
               <span className="text-[10px] text-indigo-500 font-black uppercase tracking-widest mt-1 inline-block">Tracking & Cleaning Engine</span>
             </div>
           </div>
@@ -221,7 +230,7 @@ function App() {
                 <div className="min-w-max">
                   <table className="data-table">
                     <thead>
-                      <tr>{(activeMode === 'private' ? PRIVATE_HEADERS : PUBLIC_HEADERS).map((h, i) => <th key={i}>{h}</th>)}</tr>
+                      <tr>{currentHeaders.map((h, i) => <th key={i}>{h}</th>)}</tr>
                     </thead>
                     <tbody>
                       {tableData.map((row, rI) => (
@@ -281,7 +290,7 @@ function App() {
                   <textarea value={privateStaff} onChange={(e) => setPrivateStaff(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl h-24 text-xs outline-none focus:border-indigo-400 transition-all" />
                 </div>
                 <div className="space-y-3">
-                  <label className="text-xs font-black text-slate-500 uppercase">IP团队名单</label>
+                  <label className="text-xs font-black text-slate-500 uppercase">IP 团队名单</label>
                   <textarea value={ipStaff} onChange={(e) => setIpStaff(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl h-24 text-xs outline-none focus:border-indigo-400 transition-all" />
                 </div>
                 <div className="space-y-3">
